@@ -16,7 +16,23 @@ Made with Next.js + Tailwind + NextAuth
 - Search and filter tasks
 - Responsive for web and mobile
 
-## How to start 
+## How to start
+
+**1. Install dependencies**
 ```bash
 npm install
+```
+
+**2. Create a new file called `.env.local` in the root of the project and put this inside it:**
+```dotenv
+NEXTAUTH_SECRET=your-secret-key-change-this-in-production-min32chars
+NEXTAUTH_URL=http://localhost:3000
+```
+
+**3. Run the app**
+```bash
 npm run dev
+```
+
+Then open [http://localhost:3000](http://localhost:3000) in your browser.
+

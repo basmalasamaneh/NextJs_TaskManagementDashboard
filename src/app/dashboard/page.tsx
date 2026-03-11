@@ -45,6 +45,7 @@ export default function DashboardPage() {
   const [showModal,  setShowModal]  = useState(false)
   const [refreshing, setRefreshing] = useState(false)
 
+  const isAdmin = (session?.user as any)?.role === 'admin'
   const userName = session?.user?.name?.split(' ')[0] ?? 'there'
   const handleRefresh = async () => {
   setRefreshing(true)

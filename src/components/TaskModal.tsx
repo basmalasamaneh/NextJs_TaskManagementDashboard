@@ -1,35 +1,42 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Save, Calendar, FileText, AlignLeft, Tag } from 'lucide-react'
+import { useSession } from 'next-auth/react'
+import { X, Save, Calendar, FileText, AlignLeft, Tag, User } from 'lucide-react'
 import { Task, TaskStatus, TaskPriority } from '@/types'
 
 interface TaskModalProps {
-  task?: Task | null
+  task?:   Task | null
   onClose: () => void
-  onSave: (data: Partial<Task>) => Promise<void>
+  onSave:  (data: Partial<Task>) => Promise<void>
 }
 
-// Statuses a user can explicitly choose
 const EDITABLE_STATUSES: { value: TaskStatus; label: string }[] = [
-  { value: 'pending',     label: 'Pending' },
+  { value: 'pending',     label: 'Pending'     },
   { value: 'in-progress', label: 'In Progress' },
-  { value: 'completed',   label: 'Completed' },
+  { value: 'completed',   label: 'Completed'   },
 ]
 
 export function TaskModal({ task, onClose, onSave }: TaskModalProps) {
+  const { data: session } = useSession()
   const isEdit = !!task
 
-  const [title, setTitle]           = useState(task?.title ?? '')
+  // The creator is always the logged-in user — read from session
+  const currentUserName = session?.user?.name ?? ''
+
+  const [title,       setTitle]       = useState(task?.title       ?? '')
   const [description, setDescription] = useState(task?.description ?? '')
-  const [priority, setPriority]     = useState<TaskPriority>(task?.priority ?? 'medium')
-  // When editing an overdue task, default the select to 'pending' so user can change it
-  const [status, setStatus]         = useState<TaskStatus>(
+  const [priority,    setPriority]    = useState<TaskPriority>(task?.priority ?? 'medium')
+  const [status,      setStatus]      = useState<TaskStatus>(
     task?.status === 'overdue' ? 'pending' : (task?.status ?? 'pending')
   )
-  const [dueDate, setDueDate]       = useState(task?.dueDate ?? '')
-  const [isSaving, setIsSaving]     = useState(false)
-  const [errors, setErrors]         = useState<Record<string, string>>({})
+  const [dueDate,  setDueDate]  = useState(task?.dueDate ?? '')
+  const [assignedUser, setAssignedUser] = useState(task?.assignedUser ?? '')  
+  const [isSaving, setIsSaving] = useState(false)
+  const [errors,   setErrors]   = useState<Record<string, string>>({})
+
+  // The displayed assigned user: when editing, show original creator; when creating, show current user
+  const displayAssignedUser = isEdit ? (task?.assignedUser ?? currentUserName) : currentUserName
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -39,8 +46,9 @@ export function TaskModal({ task, onClose, onSave }: TaskModalProps) {
 
   const validate = () => {
     const errs: Record<string, string> = {}
-    if (!title.trim())  errs.title   = 'Title is required'
-    if (!dueDate)       errs.dueDate = 'Due date is required'
+    if (!title.trim()) errs.title   = 'Title is required'
+    if (!dueDate)      errs.dueDate = 'Due date is required'
+    if (!assignedUser.trim()) errs.assignedUser = 'Assigned user is required'
     return errs
   }
 
@@ -56,6 +64,8 @@ export function TaskModal({ task, onClose, onSave }: TaskModalProps) {
         priority,
         status,
         dueDate,
+        assignedUser: assignedUser.trim(),  
+
       })
       onClose()
     } catch (err: any) {
@@ -69,15 +79,14 @@ export function TaskModal({ task, onClose, onSave }: TaskModalProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-green-50">
           <h2 className="text-lg font-semibold text-gray-800">
             {isEdit ? 'Edit Task' : 'Create New Task'}
           </h2>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-          >
+          <button onClick={onClose}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -90,6 +99,36 @@ export function TaskModal({ task, onClose, onSave }: TaskModalProps) {
               {errors.submit}
             </p>
           )}
+
+          {/* Assigned to — read-only, auto from session */}
+          <div className="flex items-center gap-2 px-3 py-2.5 bg-blue-50 border border-blue-100 rounded-lg">
+          {/* Assigned User — manual input */}
+
+          {/* Assigned User */}
+<div>
+  <label className="form-label flex items-center gap-1.5">
+    <User className="w-3.5 h-3.5" /> Assigned User *
+  </label>
+  <input
+    value={assignedUser}
+    onChange={e => { setAssignedUser(e.target.value); setErrors(p => ({ ...p, assignedUser: '' })) }}
+    className={`form-input ${errors.assignedUser ? 'border-red-400 focus:ring-red-400' : ''}`}
+    placeholder="Enter assigned user name"
+  />
+  {errors.assignedUser && <p className="text-xs text-red-500 mt-1">{errors.assignedUser}</p>}
+</div>
+
+
+
+            <div className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+              {displayAssignedUser.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs text-blue-500 font-medium">Created by</p>
+              <p className="text-sm font-semibold text-blue-800 truncate">{displayAssignedUser}</p>
+            </div>
+            <User className="w-4 h-4 text-blue-300 ml-auto flex-shrink-0" />
+          </div>
 
           {/* Title */}
           <div>
@@ -125,11 +164,7 @@ export function TaskModal({ task, onClose, onSave }: TaskModalProps) {
               <label className="form-label flex items-center gap-1.5">
                 <Tag className="w-3.5 h-3.5" /> Priority
               </label>
-              <select
-                value={priority}
-                onChange={e => setPriority(e.target.value as TaskPriority)}
-                className="form-select"
-              >
+              <select value={priority} onChange={e => setPriority(e.target.value as TaskPriority)} className="form-select">
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
                 <option value="high">High</option>
@@ -137,18 +172,14 @@ export function TaskModal({ task, onClose, onSave }: TaskModalProps) {
             </div>
             <div>
               <label className="form-label">Status</label>
-              <select
-                value={status}
-                onChange={e => setStatus(e.target.value as TaskStatus)}
-                className="form-select"
-              >
+              <select value={status} onChange={e => setStatus(e.target.value as TaskStatus)} className="form-select">
                 {EDITABLE_STATUSES.map(s => (
                   <option key={s.value} value={s.value}>{s.label}</option>
                 ))}
               </select>
               {isEdit && task?.status === 'overdue' && (
                 <p className="text-xs text-amber-600 mt-1">
-                  ⚠ Was overdue! update status or due date to resolve.
+                  ⚠ Was overdue — update status or due date to resolve.
                 </p>
               )}
             </div>
@@ -170,9 +201,7 @@ export function TaskModal({ task, onClose, onSave }: TaskModalProps) {
 
           {/* Footer */}
           <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100 mt-2">
-            <button type="button" onClick={onClose} className="btn-secondary px-5">
-              Cancel
-            </button>
+            <button type="button" onClick={onClose} className="btn-secondary px-5">Cancel</button>
             <button type="submit" disabled={isSaving} className="btn-primary px-5">
               {isSaving ? (
                 <>
