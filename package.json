@@ -17,7 +17,8 @@
     "bcryptjs": "^2.4.3",
     "uuid": "^10.0.0",
     "date-fns": "^3.6.0",
-    "lucide-react": "^0.400.0"
+    "lucide-react": "^0.400.0",
+    "@vercel/kv": "^2.0.0"
   },
   "devDependencies": {
     "typescript": "^5",

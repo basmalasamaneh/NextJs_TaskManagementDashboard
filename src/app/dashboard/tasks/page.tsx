@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import { useSession } from 'next-auth/react'
 import {
   Plus, Search, Filter, Pencil, Trash2,
-  CheckCircle2, RefreshCw, ChevronDown,
+  CheckCircle2, RefreshCw, ChevronDown, ChevronLeft, ChevronRight,
   ListTodo, SortAsc, Loader2, Calendar, User, Shield,
 } from 'lucide-react'
 import { useTasks } from '@/hooks/useTasks'
@@ -14,8 +14,11 @@ import { StatusBadge, PriorityBadge } from '@/components/StatusBadge'
 import { Task, TaskStatus, TaskPriority } from '@/types'
 import { format, parseISO, isToday, isTomorrow, isPast, isThisWeek } from 'date-fns'
 
+// ── Types ─────────────────────────────────────────────────────
 type SortKey    = 'createdAt' | 'dueDate' | 'title' | 'priority'
 type DateFilter = 'all' | 'today' | 'tomorrow' | 'this-week' | 'overdue'
+
+const TASKS_PER_PAGE = 10
 
 const PRIORITY_ORDER: Record<TaskPriority, number> = { high: 0, medium: 1, low: 2 }
 
@@ -37,10 +40,12 @@ function matchesDateFilter(task: Task, filter: DateFilter): boolean {
   return true
 }
 
+// ── Skeleton ──────────────────────────────────────────────────
 function Skeleton({ className }: { className?: string }) {
   return <div className={`animate-pulse bg-gray-200 rounded-lg ${className ?? ''}`} />
 }
 
+// ── Delete confirm modal ──────────────────────────────────────
 function DeleteConfirmModal({
   task, onConfirm, onCancel, isDeleting,
 }: { task: Task; onConfirm: () => void; onCancel: () => void; isDeleting: boolean }) {
@@ -72,6 +77,93 @@ function DeleteConfirmModal({
   )
 }
 
+// ── Pagination component ──────────────────────────────────────
+function Pagination({
+  currentPage,
+  totalPages,
+  totalItems,
+  perPage,
+  onPageChange,
+}: {
+  currentPage: number
+  totalPages: number
+  totalItems: number
+  perPage: number
+  onPageChange: (page: number) => void
+}) {
+  if (totalPages <= 1) return null
+
+  const start = (currentPage - 1) * perPage + 1
+  const end   = Math.min(currentPage * perPage, totalItems)
+
+  // Build page numbers with ellipsis
+  const pages: (number | '...')[] = []
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i++) pages.push(i)
+  } else {
+    pages.push(1)
+    if (currentPage > 3)             pages.push('...')
+    for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) {
+      pages.push(i)
+    }
+    if (currentPage < totalPages - 2) pages.push('...')
+    pages.push(totalPages)
+  }
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-gray-100">
+      {/* Info */}
+      <p className="text-xs text-gray-500 order-2 sm:order-1">
+        Showing <span className="font-semibold text-gray-700">{start}–{end}</span> of{' '}
+        <span className="font-semibold text-gray-700">{totalItems}</span> tasks
+      </p>
+
+      {/* Controls */}
+      <div className="flex items-center gap-1 order-1 sm:order-2">
+        {/* Previous */}
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          <ChevronLeft className="w-4 h-4" />
+          <span className="hidden sm:inline">Prev</span>
+        </button>
+
+        {/* Page numbers */}
+        {pages.map((p, i) =>
+          p === '...' ? (
+            <span key={`ellipsis-${i}`} className="px-2 py-1.5 text-sm text-gray-400">…</span>
+          ) : (
+            <button
+              key={p}
+              onClick={() => onPageChange(p as number)}
+              className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
+                p === currentPage
+                  ? 'bg-green-600 text-white shadow-sm'
+                  : 'border border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {p}
+            </button>
+          )
+        )}
+
+        {/* Next */}
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          <span className="hidden sm:inline">Next</span>
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Main page ─────────────────────────────────────────────────
 export default function TasksPage() {
   const { data: session } = useSession()
   const isAdmin = (session?.user as any)?.role === 'admin'
@@ -83,16 +175,18 @@ export default function TasksPage() {
   const [deleteTarget, setDeleteTarget] = useState<Task | null>(null)
   const [isDeleting,   setIsDeleting]   = useState(false)
 
-  // Filters 
+  // ── Filters ──────────────────────────────────────────────────
   const [search,         setSearch]         = useState('')
   const [statusFilter,   setStatusFilter]   = useState<TaskStatus | 'all'>('all')
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | 'all'>('all')
   const [dateFilter,     setDateFilter]     = useState<DateFilter>('all')
-  const [userFilter,     setUserFilter]     = useState<string>('all')  // admin only
+  const [userFilter,     setUserFilter]     = useState<string>('all')
   const [sortKey,        setSortKey]        = useState<SortKey>('createdAt')
   const [sortDir,        setSortDir]        = useState<'asc' | 'desc'>('desc')
 
-  // Unique list of assigned users, for admin's user filter dropdown
+  // ── Pagination ───────────────────────────────────────────────
+  const [currentPage, setCurrentPage] = useState(1)
+
   const uniqueUsers = useMemo(() => {
     const names = Array.from(new Set(tasks.map(t => t.assignedUser).filter(Boolean)))
     return names.sort()
@@ -109,14 +203,23 @@ export default function TasksPage() {
   const clearFilters = () => {
     setSearch(''); setStatusFilter('all'); setPriorityFilter('all')
     setDateFilter('all'); setUserFilter('all')
+    setCurrentPage(1)
   }
 
+  // Reset to page 1 whenever filters change
+  const updateSearch         = (v: string)                   => { setSearch(v);         setCurrentPage(1) }
+  const updateStatusFilter   = (v: TaskStatus | 'all')      => { setStatusFilter(v);   setCurrentPage(1) }
+  const updatePriorityFilter = (v: TaskPriority | 'all')    => { setPriorityFilter(v); setCurrentPage(1) }
+  const updateDateFilter     = (v: DateFilter)              => { setDateFilter(v);     setCurrentPage(1) }
+  const updateUserFilter     = (v: string)                  => { setUserFilter(v);     setCurrentPage(1) }
+
+  // ── Filtered + sorted list ───────────────────────────────────
   const filtered = useMemo(() => {
     let r = [...tasks]
-    if (search)            r = r.filter(t => t.title.toLowerCase().includes(search.toLowerCase()))
-    if (statusFilter   !== 'all') r = r.filter(t => t.status   === statusFilter)
-    if (priorityFilter !== 'all') r = r.filter(t => t.priority === priorityFilter)
-    if (dateFilter     !== 'all') r = r.filter(t => matchesDateFilter(t, dateFilter))
+    if (search)                       r = r.filter(t => t.title.toLowerCase().includes(search.toLowerCase()))
+    if (statusFilter   !== 'all')     r = r.filter(t => t.status   === statusFilter)
+    if (priorityFilter !== 'all')     r = r.filter(t => t.priority === priorityFilter)
+    if (dateFilter     !== 'all')     r = r.filter(t => matchesDateFilter(t, dateFilter))
     if (isAdmin && userFilter !== 'all') r = r.filter(t => t.assignedUser === userFilter)
     r.sort((a, b) => {
       const cmp =
@@ -128,6 +231,12 @@ export default function TasksPage() {
     return r
   }, [tasks, search, statusFilter, priorityFilter, dateFilter, userFilter, isAdmin, sortKey, sortDir])
 
+  // ── Pagination calculations ───────────────────────────────────
+  const totalPages  = Math.max(1, Math.ceil(filtered.length / TASKS_PER_PAGE))
+  const safePage    = Math.min(currentPage, totalPages)
+  const paginated   = filtered.slice((safePage - 1) * TASKS_PER_PAGE, safePage * TASKS_PER_PAGE)
+
+  // ── Handlers ──────────────────────────────────────────────────
   const handleSave = async (data: Partial<Task>) => {
     if (editingTask) await updateTask(editingTask.id, data)
     else             await createTask(data)
@@ -140,6 +249,10 @@ export default function TasksPage() {
     await deleteTask(deleteTarget.id)
     setIsDeleting(false)
     setDeleteTarget(null)
+    // If last item on page, go back one page
+    if (paginated.length === 1 && safePage > 1) {
+      setCurrentPage(safePage - 1)
+    }
   }
 
   return (
@@ -163,10 +276,10 @@ export default function TasksPage() {
         />
       )}
 
-      {/* Header */}
-      <div className="flex items-start justify-between mb-6 gap-4">
+      {/* ── Header ── */}
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-6 gap-3">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-bold text-gray-900">Tasks</h1>
             {isAdmin && (
               <span className="flex items-center gap-1 text-xs font-semibold bg-purple-100 text-purple-700 px-2.5 py-1 rounded-full">
@@ -189,42 +302,37 @@ export default function TasksPage() {
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">{loading ? 'Refreshing…' : 'Refresh'}</span>
-            {loading && (
-              <span className="flex gap-0.5 ml-1">
-                {[0,1,2].map(i => (
-                  <span key={i} className="w-1 h-1 rounded-full bg-gray-500 animate-bounce"
-                    style={{ animationDelay: `${i * 0.15}s` }} />
-                ))}
-              </span>
-            )}
           </button>
-          <button onClick={() => setShowModal(true)} className="btn-primary">
+          <button onClick={() => { setShowModal(true); setEditingTask(null) }} className="btn-primary">
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">New Task</span>
           </button>
         </div>
       </div>
 
-      {/* Filters */}
+      {/* ── Filters ── */}
       <div className="card p-4 mb-5 space-y-3">
         {/* Search */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => updateSearch(e.target.value)}
             className="form-input pl-9 w-full"
             placeholder="Search tasks by title…"
           />
         </div>
 
-        {/* Filter row */}
-        <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
+        {/* Filter dropdowns — responsive grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
           {/* Status */}
-          <div className="relative flex-1 min-w-[140px]">
-            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as TaskStatus | 'all')}
-              className="form-select pl-9 w-full">
+          <div className="relative col-span-1">
+            <Filter className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+            <select
+              value={statusFilter}
+              onChange={e => updateStatusFilter(e.target.value as TaskStatus | 'all')}
+              className="form-select pl-8 text-xs w-full"
+            >
               <option value="all">All Status</option>
               <option value="pending">Pending</option>
               <option value="in-progress">In Progress</option>
@@ -234,9 +342,12 @@ export default function TasksPage() {
           </div>
 
           {/* Priority */}
-          <div className="flex-1 min-w-[140px]">
-            <select value={priorityFilter} onChange={e => setPriorityFilter(e.target.value as TaskPriority | 'all')}
-              className="form-select w-full">
+          <div className="col-span-1">
+            <select
+              value={priorityFilter}
+              onChange={e => updatePriorityFilter(e.target.value as TaskPriority | 'all')}
+              className="form-select text-xs w-full"
+            >
               <option value="all">All Priority</option>
               <option value="high">High</option>
               <option value="medium">Medium</option>
@@ -245,10 +356,13 @@ export default function TasksPage() {
           </div>
 
           {/* Due Date */}
-          <div className="relative flex-1 min-w-[140px]">
-            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <select value={dateFilter} onChange={e => setDateFilter(e.target.value as DateFilter)}
-              className={`form-select pl-9 w-full ${dateFilter !== 'all' ? 'border-green-400 bg-green-50 text-green-800' : ''}`}>
+          <div className="relative col-span-1">
+            <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+            <select
+              value={dateFilter}
+              onChange={e => updateDateFilter(e.target.value as DateFilter)}
+              className={`form-select pl-8 text-xs w-full ${dateFilter !== 'all' ? 'border-green-400 bg-green-50 text-green-800' : ''}`}
+            >
               {DATE_FILTER_OPTIONS.map(o => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
@@ -257,29 +371,37 @@ export default function TasksPage() {
 
           {/* User filter — admin only */}
           {isAdmin && (
-            <div className="relative flex-1 min-w-[140px]">
-              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <select value={userFilter} onChange={e => setUserFilter(e.target.value)}
-                className={`form-select pl-9 w-full ${userFilter !== 'all' ? 'border-purple-400 bg-purple-50 text-purple-800' : ''}`}>
+            <div className="relative col-span-1">
+              <User className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+              <select
+                value={userFilter}
+                onChange={e => updateUserFilter(e.target.value)}
+                className={`form-select pl-8 text-xs w-full ${userFilter !== 'all' ? 'border-purple-400 bg-purple-50 text-purple-800' : ''}`}
+              >
                 <option value="all">All Users</option>
-                {uniqueUsers.map(u => (
-                  <option key={u} value={u}>{u}</option>
-                ))}
+                {uniqueUsers.map(u => <option key={u} value={u}>{u}</option>)}
               </select>
             </div>
           )}
 
           {/* Sort */}
-          <div className="flex items-center gap-1 flex-1 min-w-[140px]">
-            <SortAsc className="w-4 h-4 text-gray-400 flex-shrink-0" />
-            <select value={sortKey} onChange={e => setSortKey(e.target.value as SortKey)} className="form-select w-full">
+          <div className={`flex items-center gap-1 col-span-1 ${!isAdmin ? 'col-span-2 sm:col-span-1' : ''}`}>
+            <SortAsc className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+            <select
+              value={sortKey}
+              onChange={e => setSortKey(e.target.value as SortKey)}
+              className="form-select text-xs flex-1"
+            >
               <option value="createdAt">Newest</option>
               <option value="dueDate">Due Date</option>
               <option value="priority">Priority</option>
               <option value="title">Title</option>
             </select>
-            <button onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')} className="btn-secondary px-2.5 py-2">
-              <ChevronDown className={`w-4 h-4 transition-transform ${sortDir === 'asc' ? 'rotate-180' : ''}`} />
+            <button
+              onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')}
+              className="btn-secondary px-2 py-2 flex-shrink-0"
+            >
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${sortDir === 'asc' ? 'rotate-180' : ''}`} />
             </button>
           </div>
         </div>
@@ -300,7 +422,7 @@ export default function TasksPage() {
         )}
       </div>
 
-      {/* Task list */}
+      {/* ── Task list ── */}
       {loading ? (
         <div className="space-y-3">
           {Array.from({ length: 5 }).map((_, i) => (
@@ -344,37 +466,46 @@ export default function TasksPage() {
           )}
         </div>
       ) : (
-        <div className="space-y-3">
-          {filtered.map(task => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              isAdmin={isAdmin}
-              isCompleting={completingId === task.id}
-              onEdit={() => setEditingTask(task)}
-              onDelete={() => setDeleteTarget(task)}
-              onMarkComplete={() => markComplete(task.id)}
-            />
-          ))}
-          <p className="text-center text-xs text-gray-400 py-2">
-            Showing {filtered.length} of {tasks.length} tasks
-          </p>
+        <div className="card p-4">
+          <div className="space-y-3 mb-4">
+            {paginated.map(task => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                isAdmin={isAdmin}
+                isCompleting={completingId === task.id}
+                onEdit={() => setEditingTask(task)}
+                onDelete={() => setDeleteTarget(task)}
+                onMarkComplete={() => markComplete(task.id)}
+              />
+            ))}
+          </div>
+
+          {/* Pagination */}
+          <Pagination
+            currentPage={safePage}
+            totalPages={totalPages}
+            totalItems={filtered.length}
+            perPage={TASKS_PER_PAGE}
+            onPageChange={setCurrentPage}
+          />
         </div>
       )}
     </>
   )
 }
 
+// ── Task card ─────────────────────────────────────────────────
 function TaskCard({ task, isAdmin, isCompleting, onEdit, onDelete, onMarkComplete }: {
   task: Task; isAdmin: boolean; isCompleting: boolean
   onEdit: () => void; onDelete: () => void; onMarkComplete: () => void
 }) {
   return (
-    <div className={`card p-4 hover:shadow-md transition-all border-l-4 ${
-      task.status === 'overdue'       ? 'border-l-red-400'
-      : task.status === 'completed'   ? 'border-l-green-400'
-      : task.status === 'in-progress' ? 'border-l-blue-400'
-      : 'border-l-amber-400'
+    <div className={`rounded-xl border p-4 hover:shadow-md transition-all border-l-4 ${
+      task.status === 'overdue'       ? 'border-l-red-400   border-gray-100 bg-red-50/30'
+      : task.status === 'completed'   ? 'border-l-green-400 border-gray-100 bg-green-50/20'
+      : task.status === 'in-progress' ? 'border-l-blue-400  border-gray-100 bg-blue-50/20'
+      : 'border-l-amber-400 border-gray-100'
     } ${isCompleting ? 'opacity-70' : ''}`}>
       <div className="flex items-start gap-3">
 
@@ -402,19 +533,22 @@ function TaskCard({ task, isAdmin, isCompleting, onEdit, onDelete, onMarkComplet
           <div className="flex flex-wrap items-center gap-2 mt-2">
             <StatusBadge   status={task.status} />
             <PriorityBadge priority={task.priority} />
-            <span className="text-xs text-gray-400">Due: {format(parseISO(task.dueDate), 'MMM d, yyyy')}</span>
-
-            {/* Assigned user badge */}
+            <span className="text-xs text-gray-400">
+              Due: {format(parseISO(task.dueDate), 'MMM d, yyyy')}
+            </span>
             {task.assignedUser && (
               <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${
-                isAdmin ? 'bg-purple-50 text-purple-700 border border-purple-100' : 'bg-blue-50 text-blue-700'
+                isAdmin
+                  ? 'bg-purple-50 text-purple-700 border border-purple-100'
+                  : 'bg-blue-50 text-blue-700'
               }`}>
                 <User className="w-3 h-3" />
                 {task.assignedUser}
               </span>
             )}
-
-            <span className="text-xs text-gray-300">Created: {format(parseISO(task.createdAt), 'MMM d')}</span>
+            <span className="text-xs text-gray-300 hidden sm:inline">
+              Created: {format(parseISO(task.createdAt), 'MMM d')}
+            </span>
           </div>
         </div>
 

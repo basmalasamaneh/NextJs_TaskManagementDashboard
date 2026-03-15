@@ -21,22 +21,21 @@ export function TaskModal({ task, onClose, onSave }: TaskModalProps) {
   const { data: session } = useSession()
   const isEdit = !!task
 
-  // The creator is always the logged-in user — read from session
   const currentUserName = session?.user?.name ?? ''
 
-  const [title,       setTitle]       = useState(task?.title       ?? '')
-  const [description, setDescription] = useState(task?.description ?? '')
-  const [priority,    setPriority]    = useState<TaskPriority>(task?.priority ?? 'medium')
-  const [status,      setStatus]      = useState<TaskStatus>(
+  const [title,        setTitle]        = useState(task?.title        ?? '')
+  const [description,  setDescription]  = useState(task?.description  ?? '')
+  const [priority,     setPriority]     = useState<TaskPriority>(task?.priority ?? 'medium')
+  const [status,       setStatus]       = useState<TaskStatus>(
     task?.status === 'overdue' ? 'pending' : (task?.status ?? 'pending')
   )
-  const [dueDate,  setDueDate]  = useState(task?.dueDate ?? '')
-  const [assignedUser, setAssignedUser] = useState(task?.assignedUser ?? '')  
-  const [isSaving, setIsSaving] = useState(false)
-  const [errors,   setErrors]   = useState<Record<string, string>>({})
+  const [dueDate,      setDueDate]      = useState(task?.dueDate      ?? '')
+  const [assignedUser, setAssignedUser] = useState(task?.assignedUser ?? '')
+  const [isSaving,     setIsSaving]     = useState(false)
+  const [errors,       setErrors]       = useState<Record<string, string>>({})
 
-  // The displayed assigned user: when editing, show original creator; when creating, show current user
-  const displayAssignedUser = isEdit ? (task?.assignedUser ?? currentUserName) : currentUserName
+  // "Created by" shows who is logged in (read-only)
+  const createdBy = isEdit ? (task?.assignedUser || currentUserName) : currentUserName
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -46,8 +45,8 @@ export function TaskModal({ task, onClose, onSave }: TaskModalProps) {
 
   const validate = () => {
     const errs: Record<string, string> = {}
-    if (!title.trim()) errs.title   = 'Title is required'
-    if (!dueDate)      errs.dueDate = 'Due date is required'
+    if (!title.trim())        errs.title        = 'Title is required'
+    if (!dueDate)             errs.dueDate      = 'Due date is required'
     if (!assignedUser.trim()) errs.assignedUser = 'Assigned user is required'
     return errs
   }
@@ -59,13 +58,12 @@ export function TaskModal({ task, onClose, onSave }: TaskModalProps) {
     setIsSaving(true)
     try {
       await onSave({
-        title:       title.trim(),
-        description: description.trim(),
+        title:        title.trim(),
+        description:  description.trim(),
         priority,
         status,
         dueDate,
-        assignedUser: assignedUser.trim(),  
-
+        assignedUser: assignedUser.trim(),
       })
       onClose()
     } catch (err: any) {
@@ -78,10 +76,12 @@ export function TaskModal({ task, onClose, onSave }: TaskModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+
+      {/* Modal — scrollable on small screens */}
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-green-50">
+        <div className="sticky top-0 flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-green-50 z-10">
           <h2 className="text-lg font-semibold text-gray-800">
             {isEdit ? 'Edit Task' : 'Create New Task'}
           </h2>
@@ -100,34 +100,30 @@ export function TaskModal({ task, onClose, onSave }: TaskModalProps) {
             </p>
           )}
 
-          {/* Assigned to — read-only, auto from session */}
+          {/* Created by — read-only badge */}
           <div className="flex items-center gap-2 px-3 py-2.5 bg-blue-50 border border-blue-100 rounded-lg">
-          {/* Assigned User — manual input */}
-
-          {/* Assigned User */}
-<div>
-  <label className="form-label flex items-center gap-1.5">
-    <User className="w-3.5 h-3.5" /> Assigned User *
-  </label>
-  <input
-    value={assignedUser}
-    onChange={e => { setAssignedUser(e.target.value); setErrors(p => ({ ...p, assignedUser: '' })) }}
-    className={`form-input ${errors.assignedUser ? 'border-red-400 focus:ring-red-400' : ''}`}
-    placeholder="Enter assigned user name"
-  />
-  {errors.assignedUser && <p className="text-xs text-red-500 mt-1">{errors.assignedUser}</p>}
-</div>
-
-
-
             <div className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-              {displayAssignedUser.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+              {createdBy.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
             </div>
             <div className="min-w-0">
               <p className="text-xs text-blue-500 font-medium">Created by</p>
-              <p className="text-sm font-semibold text-blue-800 truncate">{displayAssignedUser}</p>
+              <p className="text-sm font-semibold text-blue-800 truncate">{createdBy}</p>
             </div>
             <User className="w-4 h-4 text-blue-300 ml-auto flex-shrink-0" />
+          </div>
+
+          {/* Assigned User — manual input */}
+          <div>
+            <label className="form-label flex items-center gap-1.5">
+              <User className="w-3.5 h-3.5" /> Assigned User *
+            </label>
+            <input
+              value={assignedUser}
+              onChange={e => { setAssignedUser(e.target.value); setErrors(p => ({ ...p, assignedUser: '' })) }}
+              className={`form-input ${errors.assignedUser ? 'border-red-400 focus:ring-red-400' : ''}`}
+              placeholder="Enter assigned user name"
+            />
+            {errors.assignedUser && <p className="text-xs text-red-500 mt-1">{errors.assignedUser}</p>}
           </div>
 
           {/* Title */}
@@ -159,7 +155,7 @@ export function TaskModal({ task, onClose, onSave }: TaskModalProps) {
           </div>
 
           {/* Priority + Status */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="form-label flex items-center gap-1.5">
                 <Tag className="w-3.5 h-3.5" /> Priority
@@ -200,7 +196,7 @@ export function TaskModal({ task, onClose, onSave }: TaskModalProps) {
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100 mt-2">
+          <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100">
             <button type="button" onClick={onClose} className="btn-secondary px-5">Cancel</button>
             <button type="submit" disabled={isSaving} className="btn-primary px-5">
               {isSaving ? (

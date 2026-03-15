@@ -1,27 +1,9 @@
 import { Task, TaskStatus } from '@/types'
 import { v4 as uuidv4 } from 'uuid'
 import { isPast, parseISO } from 'date-fns'
-import fs   from 'fs'
-import path from 'path'
+import { storageGet, storageSet, storageKeys } from './storage'
 
-const DATA_DIR  = path.join(process.cwd(), 'data')
-const DATA_FILE = path.join(DATA_DIR, 'tasks.json')
-
-function ensureDir() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true })
-}
-
-function readAll(): Record<string, Task[]> {
-  ensureDir()
-  if (!fs.existsSync(DATA_FILE)) return {}
-  try { return JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8')) }
-  catch { return {} }
-}
-
-function writeAll(data: Record<string, Task[]>) {
-  ensureDir()
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8')
-}
+const key = (userId: string) => `tasks:${userId}`
 
 function resolveStatus(task: Task): TaskStatus {
   if (task.status === 'completed')   return 'completed'
@@ -34,24 +16,31 @@ function resolveStatus(task: Task): TaskStatus {
   return task.status
 }
 
-// Regular user: own tasks only 
-export function getTasksByUserId(userId: string): Task[] {
-  const all = readAll()
-  return (all[userId] ?? []).map(t => ({ ...t, status: resolveStatus(t) }))
+async function readUserTasks(userId: string): Promise<Task[]> {
+  return (await storageGet(key(userId))) ?? []
 }
 
-// Admin: every task from every user, sorted newest first
-export function getAllTasks(): Task[] {
-  const all = readAll()
-  return Object.values(all)
-    .flat()
-    .map(t => ({ ...t, status: resolveStatus(t) }))
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+async function writeUserTasks(userId: string, tasks: Task[]): Promise<void> {
+  await storageSet(key(userId), tasks)
 }
 
-// Stats
-export function getTaskStats(userId: string, isAdmin: boolean) {
-  const tasks        = isAdmin ? getAllTasks() : getTasksByUserId(userId)
+export async function getTasksByUserId(userId: string): Promise<Task[]> {
+  const tasks = await readUserTasks(userId)
+  return tasks.map(t => ({ ...t, status: resolveStatus(t) }))
+}
+
+export async function getAllTasks(): Promise<Task[]> {
+  const keys = await storageKeys('tasks:*')
+  const all: Task[] = []
+  for (const k of keys) {
+    const tasks: Task[] = (await storageGet(k)) ?? []
+    all.push(...tasks.map(t => ({ ...t, status: resolveStatus(t) })))
+  }
+  return all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+}
+
+export async function getTaskStats(userId: string, isAdmin: boolean) {
+  const tasks        = isAdmin ? await getAllTasks() : await getTasksByUserId(userId)
   const total        = tasks.length
   const completed    = tasks.filter(t => t.status === 'completed').length
   const overdue      = tasks.filter(t => t.status === 'overdue').length
@@ -61,17 +50,16 @@ export function getTaskStats(userId: string, isAdmin: boolean) {
   return { total, completed, pending, inProgress, overdue, completionRate }
 }
 
-// CRUD
-export function createTask(
+export async function createTask(
   userId: string,
   data: {
     title: string; description: string
     priority: Task['priority']; dueDate: string
     assignedUser: string; status?: TaskStatus
   }
-): Task {
-  const all = readAll()
-  const now  = new Date().toISOString()
+): Promise<Task> {
+  const tasks = await readUserTasks(userId)
+  const now   = new Date().toISOString()
   const task: Task = {
     id: uuidv4(), userId,
     title:        data.title,
@@ -83,69 +71,67 @@ export function createTask(
     createdAt:    now,
     updatedAt:    now,
   }
-  all[userId] = [...(all[userId] ?? []), task]
-  writeAll(all)
+  await writeUserTasks(userId, [...tasks, task])
   return { ...task, status: resolveStatus(task) }
 }
 
-export function updateTask(
-  userId: string, taskId: string,
+export async function updateTask(
+  userId: string,
+  taskId: string,
   data: Partial<Omit<Task, 'id' | 'userId' | 'createdAt'>>,
   isAdmin = false
-): Task | null {
-  const all = readAll()
-
-  // Admin can update any user's task
+): Promise<Task | null> {
   if (isAdmin) {
-    for (const uid of Object.keys(all)) {
-      const idx = all[uid].findIndex(t => t.id === taskId)
+    const allKeys = await storageKeys('tasks:*')
+    for (const k of allKeys) {
+      const tasks: Task[] = (await storageGet(k)) ?? []
+      const idx = tasks.findIndex(t => t.id === taskId)
       if (idx !== -1) {
-        const updated: Task = { ...all[uid][idx], ...data, updatedAt: new Date().toISOString() }
-        all[uid][idx] = updated
-        writeAll(all)
+        const updated: Task = { ...tasks[idx], ...data, updatedAt: new Date().toISOString() }
+        tasks[idx] = updated
+        await storageSet(k, tasks)
         return { ...updated, status: resolveStatus(updated) }
       }
     }
     return null
   }
 
-  const tasks = all[userId] ?? []
+  const tasks = await readUserTasks(userId)
   const idx   = tasks.findIndex(t => t.id === taskId)
   if (idx === -1) return null
   const updated: Task = { ...tasks[idx], ...data, updatedAt: new Date().toISOString() }
-  tasks[idx]  = updated
-  all[userId] = [...tasks]
-  writeAll(all)
+  tasks[idx] = updated
+  await writeUserTasks(userId, tasks)
   return { ...updated, status: resolveStatus(updated) }
 }
 
-export function deleteTask(userId: string, taskId: string, isAdmin = false): boolean {
-  const all = readAll()
-
-  // Admin can delete any user's task
+export async function deleteTask(
+  userId: string,
+  taskId: string,
+  isAdmin = false
+): Promise<boolean> {
   if (isAdmin) {
-    for (const uid of Object.keys(all)) {
-      const before = all[uid].length
-      all[uid] = all[uid].filter(t => t.id !== taskId)
-      if (all[uid].length < before) { writeAll(all); return true }
+    const allKeys = await storageKeys('tasks:*')
+    for (const k of allKeys) {
+      const tasks: Task[] = (await storageGet(k)) ?? []
+      const next = tasks.filter(t => t.id !== taskId)
+      if (next.length < tasks.length) { await storageSet(k, next); return true }
     }
     return false
   }
 
-  const tasks = all[userId] ?? []
+  const tasks = await readUserTasks(userId)
   const next  = tasks.filter(t => t.id !== taskId)
   if (next.length === tasks.length) return false
-  all[userId] = next
-  writeAll(all)
+  await writeUserTasks(userId, next)
   return true
 }
 
-// Seed 
-export function seedDemoTasks(userId: string, userName: string) {
-  const all = readAll()
-  if (all[userId] !== undefined) return
-  all[userId] = []
-  writeAll(all)
+export async function seedDemoTasks(userId: string, userName: string): Promise<void> {
+  const existing = await storageGet(key(userId))
+  if (existing !== null) return
+
+  await writeUserTasks(userId, [])
 
   const now    = new Date()
   const future = (d: number) => { const x = new Date(now); x.setDate(x.getDate() + d); return x.toISOString().split('T')[0] }
@@ -162,6 +148,7 @@ export function seedDemoTasks(userId: string, userName: string) {
     { title: 'Write unit tests',               description: 'Achieve 80% test coverage for the core business logic.',            priority: 'medium', dueDate: future(10), status: 'in-progress' },
     { title: 'Database optimization',          description: 'Add indexes to improve query performance on the reports table.',    priority: 'high',   dueDate: future(2),  status: 'completed'   },
   ]
-  // Each seed task is assigned to the user who logged in
-  seeds.forEach(s => createTask(userId, { ...s, assignedUser: userName }))
+  for (const s of seeds) {
+    await createTask(userId, { ...s, assignedUser: userName })
+  }
 }
