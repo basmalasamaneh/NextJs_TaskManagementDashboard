@@ -5,16 +5,18 @@ Made with Next.js + Tailwind + NextAuth
 
 ## What it can do
 
-- Login / Logout (email + password)
-- See all your tasks on dashboard
-- Add new task
-- Edit task
-- Delete task
-- Mark task as done with one click
-- See stats: total, done, pending, overdue
-- Small pie chart + bar chart
-- Search and filter tasks
-- Responsive for web and mobile
+- Login / Logout with session management (10-minute sessions)
+- Protected dashboard routes
+- User info in the navigation bar
+- Dashboard with stats: Total, Completed, Pending, Overdue
+- Progress bar + Pie/Bar chart (Recharts)
+- Full Task CRUD: Create, Edit, Delete, Mark as Complete
+- Search tasks by title
+- Filter by Status, Priority, Due Date
+- Pagination (10 tasks per page)
+- Admin view: see and manage all users' tasks
+- Fully responsive (desktop + mobile)
+- Deployable to Vercel with persistent storage (Vercel KV)
 
 ## How to start
 
@@ -35,4 +37,7 @@ npm run dev
 ```
 
 Then open [http://localhost:3000](http://localhost:3000) in your browser.
+
+**4. Live Application URL**
+Open [https://next-js-task-management-dashboard.vercel.app/](https://next-js-task-management-dashboard.vercel.app/) in your browser.
 
