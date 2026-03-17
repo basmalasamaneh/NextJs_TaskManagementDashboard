@@ -5,8 +5,9 @@ import { useSession } from 'next-auth/react'
 import {
   Plus, Search, Filter, Pencil, Trash2,
   CheckCircle2, RefreshCw, ChevronDown, ChevronLeft, ChevronRight,
-  ListTodo, SortAsc, Loader2, Calendar, User, Shield,
+  ListTodo, SortAsc, Loader2, Calendar, User, Shield, Eye,
 } from 'lucide-react'
+import Link from 'next/link'
 import { useTasks } from '@/hooks/useTasks'
 import { TaskModal }     from '@/components/TaskModal'
 import { ActionOverlay } from '@/components/ActionOverlay'
@@ -47,8 +48,8 @@ function Skeleton({ className }: { className?: string }) {
 
 // ── Delete confirm modal ──────────────────────────────────────
 function DeleteConfirmModal({
-  task, onConfirm, onCancel, isDeleting,
-}: { task: Task; onConfirm: () => void; onCancel: () => void; isDeleting: boolean }) {
+  task, onConfirm, onCancel, isDeleting, error,
+}: { task: Task; onConfirm: () => void; onCancel: () => void; isDeleting: boolean; error?: string }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => !isDeleting && onCancel()} />
@@ -66,6 +67,11 @@ function DeleteConfirmModal({
             ? 'Removing task from your list…'
             : <>Are you sure you want to delete <span className="font-medium text-gray-700">"{task.title}"</span>? This cannot be undone.</>}
         </p>
+        {error && (
+          <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">
+            {error}
+          </p>
+        )}
         {!isDeleting && (
           <div className="flex gap-3">
             <button onClick={onCancel}  className="btn-secondary flex-1">Cancel</button>
@@ -167,6 +173,7 @@ function Pagination({
 export default function TasksPage() {
   const { data: session } = useSession()
   const isAdmin = (session?.user as any)?.role === 'admin'
+  const currentUserId = (session?.user as any)?.id as string | undefined
 
   const { tasks, loading, actionState, completingId, refetch, createTask, updateTask, markComplete, deleteTask } = useTasks()
 
@@ -174,6 +181,7 @@ export default function TasksPage() {
   const [editingTask,  setEditingTask]  = useState<Task | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Task | null>(null)
   const [isDeleting,   setIsDeleting]   = useState(false)
+  const [deleteError,  setDeleteError]  = useState<string>('')
 
   // ── Filters ──────────────────────────────────────────────────
   const [search,         setSearch]         = useState('')
@@ -188,7 +196,7 @@ export default function TasksPage() {
   const [currentPage, setCurrentPage] = useState(1)
 
   const uniqueUsers = useMemo(() => {
-    const names = Array.from(new Set(tasks.map(t => t.assignedUser).filter(Boolean)))
+    const names = Array.from(new Set(tasks.map(t => t.createdBy).filter(Boolean)))
     return names.sort()
   }, [tasks])
 
@@ -220,7 +228,7 @@ export default function TasksPage() {
     if (statusFilter   !== 'all')     r = r.filter(t => t.status   === statusFilter)
     if (priorityFilter !== 'all')     r = r.filter(t => t.priority === priorityFilter)
     if (dateFilter     !== 'all')     r = r.filter(t => matchesDateFilter(t, dateFilter))
-    if (isAdmin && userFilter !== 'all') r = r.filter(t => t.assignedUser === userFilter)
+    if (isAdmin && userFilter !== 'all') r = r.filter(t => t.createdBy === userFilter)
     r.sort((a, b) => {
       const cmp =
         sortKey === 'priority' ? PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]
@@ -246,12 +254,18 @@ export default function TasksPage() {
   const handleDelete = async () => {
     if (!deleteTarget) return
     setIsDeleting(true)
-    await deleteTask(deleteTarget.id)
-    setIsDeleting(false)
-    setDeleteTarget(null)
-    // If last item on page, go back one page
-    if (paginated.length === 1 && safePage > 1) {
-      setCurrentPage(safePage - 1)
+    setDeleteError('')
+    try {
+      await deleteTask(deleteTarget.id)
+      setDeleteTarget(null)
+      // If last item on page, go back one page
+      if (paginated.length === 1 && safePage > 1) {
+        setCurrentPage(safePage - 1)
+      }
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : 'Failed to delete task')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -271,8 +285,9 @@ export default function TasksPage() {
         <DeleteConfirmModal
           task={deleteTarget}
           onConfirm={handleDelete}
-          onCancel={() => setDeleteTarget(null)}
+          onCancel={() => { setDeleteTarget(null); setDeleteError('') }}
           isDeleting={isDeleting}
+          error={deleteError}
         />
       )}
 
@@ -378,7 +393,7 @@ export default function TasksPage() {
                 onChange={e => updateUserFilter(e.target.value)}
                 className={`form-select pl-8 text-xs w-full ${userFilter !== 'all' ? 'border-purple-400 bg-purple-50 text-purple-800' : ''}`}
               >
-                <option value="all">All Users</option>
+                <option value="all">All Creators</option>
                 {uniqueUsers.map(u => <option key={u} value={u}>{u}</option>)}
               </select>
             </div>
@@ -473,9 +488,10 @@ export default function TasksPage() {
                 key={task.id}
                 task={task}
                 isAdmin={isAdmin}
+                canDelete={isAdmin}
                 isCompleting={completingId === task.id}
                 onEdit={() => setEditingTask(task)}
-                onDelete={() => setDeleteTarget(task)}
+                onDelete={() => { setDeleteError(''); setDeleteTarget(task) }}
                 onMarkComplete={() => markComplete(task.id)}
               />
             ))}
@@ -496,8 +512,8 @@ export default function TasksPage() {
 }
 
 // ── Task card ─────────────────────────────────────────────────
-function TaskCard({ task, isAdmin, isCompleting, onEdit, onDelete, onMarkComplete }: {
-  task: Task; isAdmin: boolean; isCompleting: boolean
+function TaskCard({ task, isAdmin, canDelete, isCompleting, onEdit, onDelete, onMarkComplete }: {
+  task: Task; isAdmin: boolean; canDelete: boolean; isCompleting: boolean
   onEdit: () => void; onDelete: () => void; onMarkComplete: () => void
 }) {
   return (
@@ -536,6 +552,11 @@ function TaskCard({ task, isAdmin, isCompleting, onEdit, onDelete, onMarkComplet
             <span className="text-xs text-gray-400">
               Due: {format(parseISO(task.dueDate), 'MMM d, yyyy')}
             </span>
+            {task.createdBy && (
+              <span className="text-xs px-2 py-0.5 rounded-full border border-emerald-100 bg-emerald-50 text-emerald-700">
+                Created by: {task.createdBy}
+              </span>
+            )}
             {task.assignedUser && (
               <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${
                 isAdmin
@@ -543,7 +564,7 @@ function TaskCard({ task, isAdmin, isCompleting, onEdit, onDelete, onMarkComplet
                   : 'bg-blue-50 text-blue-700'
               }`}>
                 <User className="w-3 h-3" />
-                {task.assignedUser}
+                Assigned as: {task.assignedUser}
               </span>
             )}
             <span className="text-xs text-gray-300 hidden sm:inline">
@@ -554,16 +575,23 @@ function TaskCard({ task, isAdmin, isCompleting, onEdit, onDelete, onMarkComplet
 
         {/* Actions */}
         <div className="flex items-center gap-1.5 flex-shrink-0">
+          <Link href={`/dashboard/tasks/${task.id}`}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+            title="View details">
+            <Eye className="w-4 h-4" />
+          </Link>
           <button onClick={onEdit} disabled={isCompleting}
             className="p-1.5 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors disabled:opacity-40"
             title="Edit task">
             <Pencil className="w-4 h-4" />
           </button>
-          <button onClick={onDelete} disabled={isCompleting}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40"
-            title="Delete task">
-            <Trash2 className="w-4 h-4" />
-          </button>
+          {canDelete && (
+            <button onClick={onDelete} disabled={isCompleting}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40"
+              title="Delete task">
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
     </div>

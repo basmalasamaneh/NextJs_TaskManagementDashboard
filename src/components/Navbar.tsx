@@ -5,13 +5,14 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
 import {
-  CheckSquare, LayoutDashboard, ListTodo,
+  Activity, CheckSquare, LayoutDashboard, ListTodo,
   LogOut, Menu, X, ChevronDown, Loader2,
 } from 'lucide-react'
 
 const navLinks = [
-  { href: '/dashboard',       label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/dashboard/tasks', label: 'Tasks',     icon: ListTodo },
+  { href: '/dashboard',         label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/dashboard/tasks',   label: 'Tasks',     icon: ListTodo },
+  { href: '/dashboard/activity', label: 'Activity',  icon: Activity },
 ]
 
 export function Navbar() {

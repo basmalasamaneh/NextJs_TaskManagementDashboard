@@ -11,8 +11,9 @@ function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)) }
 async function apiFetch(url: string, options?: RequestInit): Promise<any | null> {
   try {
     const res = await fetch(url, options)
-    if (!res.ok) return null
-    return await res.json()
+    const data = await res.json().catch(() => null)
+    if (!res.ok) return { success: false, ...(data ?? {}), status: res.status }
+    return data
   } catch {
     return null
   }
@@ -97,10 +98,14 @@ export function useTasks() {
 
   const deleteTask = async (id: string) => {
     setActionState('deleting')
-    await Promise.all([
+    const [result] = await Promise.all([
       apiFetch(`/api/tasks/${id}`, { method: 'DELETE' }),
       sleep(MIN_FEEDBACK_MS),
     ])
+    if (!result?.success) {
+      setActionState('idle')
+      throw new Error(result?.error ?? 'Failed to delete task')
+    }
     await fetchAll()
     setActionState('idle')
   }

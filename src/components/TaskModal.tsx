@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
-import { X, Save, Calendar, FileText, AlignLeft, Tag, User } from 'lucide-react'
+import { X, Save, Calendar, FileText, AlignLeft, Tag, User, AlertCircle } from 'lucide-react'
 import { Task, TaskStatus, TaskPriority } from '@/types'
 
 interface TaskModalProps {
@@ -20,8 +20,12 @@ const EDITABLE_STATUSES: { value: TaskStatus; label: string }[] = [
 export function TaskModal({ task, onClose, onSave }: TaskModalProps) {
   const { data: session } = useSession()
   const isEdit = !!task
-
+  const isAdmin = (session?.user as any)?.role === 'admin'
+  const currentUserId = (session?.user as any)?.id
   const currentUserName = session?.user?.name ?? ''
+
+  // For non-admin users editing an existing task, only allow status updates
+  const isUserEditingOwnTask = isEdit && !isAdmin && task?.userId === currentUserId
 
   const [title,        setTitle]        = useState(task?.title        ?? '')
   const [description,  setDescription]  = useState(task?.description  ?? '')
@@ -34,8 +38,8 @@ export function TaskModal({ task, onClose, onSave }: TaskModalProps) {
   const [isSaving,     setIsSaving]     = useState(false)
   const [errors,       setErrors]       = useState<Record<string, string>>({})
 
-  // "Created by" shows who is logged in (read-only)
-  const createdBy = isEdit ? (task?.assignedUser || currentUserName) : currentUserName
+  // "Created by" shows the real owner of the task.
+  const createdBy = isEdit ? (task?.createdBy || currentUserName) : currentUserName
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -45,9 +49,19 @@ export function TaskModal({ task, onClose, onSave }: TaskModalProps) {
 
   const validate = () => {
     const errs: Record<string, string> = {}
+    
+    // Users editing their own tasks only need status validated
+    if (isUserEditingOwnTask) {
+      return errs
+    }
+
     if (!title.trim())        errs.title        = 'Title is required'
     if (!dueDate)             errs.dueDate      = 'Due date is required'
-    if (!assignedUser.trim()) errs.assignedUser = 'Assigned user is required'
+    if (!assignedUser.trim()) {
+      errs.assignedUser = 'Assigned user is required'
+    } else if (assignedUser.trim().length <= 3) {
+      errs.assignedUser = 'Assigned user must be more than 3 characters'
+    }
     return errs
   }
 
@@ -57,14 +71,19 @@ export function TaskModal({ task, onClose, onSave }: TaskModalProps) {
     if (Object.keys(errs).length > 0) { setErrors(errs); return }
     setIsSaving(true)
     try {
-      await onSave({
-        title:        title.trim(),
-        description:  description.trim(),
-        priority,
-        status,
-        dueDate,
-        assignedUser: assignedUser.trim(),
-      })
+      // Users can only update status
+      if (isUserEditingOwnTask) {
+        await onSave({ status })
+      } else {
+        await onSave({
+          title:        title.trim(),
+          description:  description.trim(),
+          priority,
+          status,
+          dueDate,
+          assignedUser: assignedUser.trim(),
+        })
+      }
       onClose()
     } catch (err: any) {
       setErrors({ submit: err.message ?? 'Save failed. Please try again.' })
@@ -83,7 +102,7 @@ export function TaskModal({ task, onClose, onSave }: TaskModalProps) {
         {/* Header */}
         <div className="sticky top-0 flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-green-50 z-10">
           <h2 className="text-lg font-semibold text-gray-800">
-            {isEdit ? 'Edit Task' : 'Create New Task'}
+            {isUserEditingOwnTask ? 'Update Task Status' : (isEdit ? 'Edit Task' : 'Create New Task')}
           </h2>
           <button onClick={onClose}
             className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
@@ -100,6 +119,16 @@ export function TaskModal({ task, onClose, onSave }: TaskModalProps) {
             </p>
           )}
 
+          {/* Permission notice for regular users */}
+          {isUserEditingOwnTask && (
+            <div className="flex items-start gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg">
+              <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-amber-700">
+                You can only update the status. Other fields are managed by admins.
+              </p>
+            </div>
+          )}
+
           {/* Created by — read-only badge */}
           <div className="flex items-center gap-2 px-3 py-2.5 bg-blue-50 border border-blue-100 rounded-lg">
             <div className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
@@ -112,16 +141,17 @@ export function TaskModal({ task, onClose, onSave }: TaskModalProps) {
             <User className="w-4 h-4 text-blue-300 ml-auto flex-shrink-0" />
           </div>
 
-          {/* Assigned User — manual input */}
+          {/* Assigned User — disabled for users editing own task */}
           <div>
             <label className="form-label flex items-center gap-1.5">
-              <User className="w-3.5 h-3.5" /> Assigned User *
+              <User className="w-3.5 h-3.5" /> Assigned User {!isUserEditingOwnTask && '*'}
             </label>
             <input
+              disabled={isUserEditingOwnTask}
               value={assignedUser}
               onChange={e => { setAssignedUser(e.target.value); setErrors(p => ({ ...p, assignedUser: '' })) }}
-              className={`form-input ${errors.assignedUser ? 'border-red-400 focus:ring-red-400' : ''}`}
-              placeholder="Enter assigned user name"
+              className={`form-input ${isUserEditingOwnTask ? 'bg-gray-100 cursor-not-allowed' : ''} ${errors.assignedUser ? 'border-red-400 focus:ring-red-400' : ''}`}
+              placeholder="Type assignee full name"
             />
             {errors.assignedUser && <p className="text-xs text-red-500 mt-1">{errors.assignedUser}</p>}
           </div>
@@ -129,12 +159,13 @@ export function TaskModal({ task, onClose, onSave }: TaskModalProps) {
           {/* Title */}
           <div>
             <label className="form-label flex items-center gap-1.5">
-              <FileText className="w-3.5 h-3.5" /> Title *
+              <FileText className="w-3.5 h-3.5" /> Title {!isUserEditingOwnTask && '*'}
             </label>
             <input
+              disabled={isUserEditingOwnTask}
               value={title}
               onChange={e => { setTitle(e.target.value); setErrors(p => ({ ...p, title: '' })) }}
-              className={`form-input ${errors.title ? 'border-red-400 focus:ring-red-400' : ''}`}
+              className={`form-input ${isUserEditingOwnTask ? 'bg-gray-100 cursor-not-allowed' : ''} ${errors.title ? 'border-red-400 focus:ring-red-400' : ''}`}
               placeholder="Enter task title"
             />
             {errors.title && <p className="text-xs text-red-500 mt-1">{errors.title}</p>}
@@ -146,9 +177,10 @@ export function TaskModal({ task, onClose, onSave }: TaskModalProps) {
               <AlignLeft className="w-3.5 h-3.5" /> Description
             </label>
             <textarea
+              disabled={isUserEditingOwnTask}
               value={description}
               onChange={e => setDescription(e.target.value)}
-              className="form-textarea"
+              className={`form-textarea ${isUserEditingOwnTask ? 'bg-gray-100 cursor-not-allowed' : ''}`}
               rows={3}
               placeholder="Optional description…"
             />
@@ -160,7 +192,7 @@ export function TaskModal({ task, onClose, onSave }: TaskModalProps) {
               <label className="form-label flex items-center gap-1.5">
                 <Tag className="w-3.5 h-3.5" /> Priority
               </label>
-              <select value={priority} onChange={e => setPriority(e.target.value as TaskPriority)} className="form-select">
+              <select disabled={isUserEditingOwnTask} value={priority} onChange={e => setPriority(e.target.value as TaskPriority)} className={`form-select ${isUserEditingOwnTask ? 'bg-gray-100 cursor-not-allowed' : ''}`}>
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
                 <option value="high">High</option>
@@ -184,13 +216,14 @@ export function TaskModal({ task, onClose, onSave }: TaskModalProps) {
           {/* Due Date */}
           <div>
             <label className="form-label flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5" /> Due Date *
+              <Calendar className="w-3.5 h-3.5" /> Due Date {!isUserEditingOwnTask && '*'}
             </label>
             <input
+              disabled={isUserEditingOwnTask}
               type="date"
               value={dueDate}
               onChange={e => { setDueDate(e.target.value); setErrors(p => ({ ...p, dueDate: '' })) }}
-              className={`form-input ${errors.dueDate ? 'border-red-400 focus:ring-red-400' : ''}`}
+              className={`form-input ${isUserEditingOwnTask ? 'bg-gray-100 cursor-not-allowed' : ''} ${errors.dueDate ? 'border-red-400 focus:ring-red-400' : ''}`}
             />
             {errors.dueDate && <p className="text-xs text-red-500 mt-1">{errors.dueDate}</p>}
           </div>
@@ -207,7 +240,7 @@ export function TaskModal({ task, onClose, onSave }: TaskModalProps) {
               ) : (
                 <>
                   <Save className="w-4 h-4" />
-                  {isEdit ? 'Update Task' : 'Create Task'}
+                  {isUserEditingOwnTask ? 'Update Status' : (isEdit ? 'Update Task' : 'Create Task')}
                 </>
               )}
             </button>

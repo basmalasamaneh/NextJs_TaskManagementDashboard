@@ -8,6 +8,8 @@ export interface Task {
   status:       TaskStatus
   priority:     TaskPriority
   dueDate:      string
+  createdBy?:   string
+  assignedUserId?: string
   assignedUser: string        
   createdAt:    string
   updatedAt:    string
@@ -23,11 +25,25 @@ export interface TaskStats {
   completionRate: number
 }
 
+export type ActivityAction = 'task_created' | 'task_updated' | 'task_deleted' | 'status_changed'
+
+export interface ActivityLog {
+  id:        string
+  userId:    string
+  userName:  string
+  action:    ActivityAction
+  timestamp: string
+  taskId?:   string
+  taskTitle?: string
+  details?:  string
+}
+
 export interface CreateTaskInput {
   title:        string
   description:  string
   priority:     TaskPriority
   dueDate:      string
+  assignedUserId?: string
   assignedUser: string
   status?:      TaskStatus
 }
