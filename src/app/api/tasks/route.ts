@@ -4,7 +4,6 @@ import { authOptions } from '@/lib/authOptions'
 import { getTasksByUserId, getAllTasks, createTask, getTaskStats } from '@/lib/taskStore'
 import { addActivity } from '@/lib/activityStore'
 import { canCreateTask, canViewTask } from '@/lib/rbac'
-import { ensureDemoData } from '@/lib/demoData'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,7 +16,6 @@ export async function GET(req: NextRequest) {
     }
 
     const user     = session.user as any
-    await ensureDemoData()
     const userId   = user.id   as string
     const userRole = (user.role as string) as any
     const isAdmin  = userRole === 'admin'
@@ -57,7 +55,6 @@ export async function POST(req: NextRequest) {
     }
 
     const user   = session.user as any
-    await ensureDemoData()
     const userId = user.id as string
     const userRole = (user.role as string) as any
 

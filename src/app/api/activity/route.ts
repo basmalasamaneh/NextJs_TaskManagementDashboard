@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
-import { ensureDemoData } from '@/lib/demoData'
 import { getActivitiesByUserId, getAllActivities } from '@/lib/activityStore'
 
 export const dynamic = 'force-dynamic'
@@ -22,7 +21,6 @@ export async function GET(req: NextRequest) {
     }
 
     const user     = session.user as any
-    await ensureDemoData()
     const userId   = user.id as string
     const userRole = (user.role as string) as any
     const isAdmin  = userRole === 'admin'

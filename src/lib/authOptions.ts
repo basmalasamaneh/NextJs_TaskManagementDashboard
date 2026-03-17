@@ -1,11 +1,30 @@
 import { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
-import { getUserByEmail } from './userStore'
-import { ensureDemoData } from './demoData'
+import { getUserByEmail, createUser } from './userStore'
 
-// Best-effort warm-up for environments where module init runs before first request.
-ensureDemoData().catch(console.error)
+const DEMO_USERS = [
+  { id: 'user-1', name: 'Admin User',      email: 'admin@gmail.com',   password: 'admin123',   role: 'admin' },
+  { id: 'user-2', name: 'Basmala Samaneh', email: 'basmala@gmail.com', password: 'basmala123', role: 'user'  },
+]
+
+async function initializeDemoUsers() {
+  for (const demo of DEMO_USERS) {
+    const existing = await getUserByEmail(demo.email)
+    if (!existing) {
+      await createUser({
+        id:           demo.id,
+        name:         demo.name,
+        email:        demo.email,
+        passwordHash: bcrypt.hashSync(demo.password, 10),
+        role:         demo.role as 'admin' | 'user',
+      })
+    }
+  }
+}
+
+// Initialize demo users whenever this module is loaded (every cold-start).
+initializeDemoUsers().catch(console.error)
 
 export const SESSION_MAX_AGE = 10 * 60  // 10 minutes
 
@@ -20,7 +39,6 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null
         try {
-          await ensureDemoData()
           const user = await getUserByEmail(credentials.email.toLowerCase())
           if (!user) return null
           const ok = await bcrypt.compare(credentials.password, user.passwordHash)

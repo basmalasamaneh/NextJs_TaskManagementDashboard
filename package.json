@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@libsql/client": "^0.17.0",
     "@vercel/kv": "^2.0.0",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^12.8.0",
