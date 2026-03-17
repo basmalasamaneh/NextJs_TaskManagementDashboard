@@ -5,6 +5,8 @@ import { updateTask, deleteTask, getTaskById } from '@/lib/taskStore'
 import { addActivity } from '@/lib/activityStore'
 import { canEditTask, canDeleteTask, canUpdateTaskStatus } from '@/lib/rbac'
 
+export const dynamic = 'force-dynamic'
+
 // ── PUT /api/tasks/:id ────────────────────────────────────────
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   try {
