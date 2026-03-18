@@ -1,7 +1,7 @@
 # TaskBoard – My Task Manager
 
 Simple dashboard to manage tasks  
-Made with Next.js + Tailwind + NextAuth
+Made with Next.js + Tailwind + NextAuth + SQLite (Drizzle ORM)
 
 ## What it can do
 
@@ -14,9 +14,18 @@ Made with Next.js + Tailwind + NextAuth
 - Search tasks by title
 - Filter by Status, Priority, Due Date
 - Pagination (10 tasks per page)
-- Admin view: see and manage all users' tasks
+- **Role-Based Access Control (RBAC)**:
+  - Admin: view & manage ALL tasks
+  - User: only see & change the status of their own tasks (no delete)
+- **Activity Logs**:
+  - Records task creation, updates, deletions, status changes
+  - Shows who did what and when
+  - Viewable in a separate logs page
+- **Real database** with SQLite + Drizzle ORM:
+  - Stores users, tasks, and activity logs
+  - Tasks linked to users, logs linked to tasks & users
 - Fully responsive (desktop + mobile)
-- Deployable to Vercel with persistent storage (Vercel KV)
+- Deployable to Vercel with persistent storage (Turso/libsql)
 
 ## How to start
 
@@ -29,6 +38,8 @@ npm install
 ```dotenv
 NEXTAUTH_SECRET=your-secret-key-change-this-in-production-min32chars
 NEXTAUTH_URL=http://localhost:3000
+
+TURSO_DATABASE_URL=file:./sqlite.db
 ```
 
 **3. Run the app**
