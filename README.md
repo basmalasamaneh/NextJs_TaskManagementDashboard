@@ -11,10 +11,16 @@ Made with Next.js + Tailwind + NextAuth
 - Dashboard with stats: Total, Completed, Pending, Overdue
 - Progress bar + Pie/Bar chart (Recharts)
 - Full Task CRUD: Create, Edit, Delete, Mark as Complete
+- In-app notifications for task events (assign, status update, update, delete)
+- Role-aware notifications (Admin gets all relevant events, users get their own related events)
+- Notification bell with unread count, grouped list, timestamps, and mark-all-read
 - Search tasks by title
 - Filter by Status, Priority, Due Date
 - Pagination (10 tasks per page)
 - Admin view: see and manage all users' tasks
+- Client-side caching with React Query (TanStack Query)
+- Faster navigation with cached task/activity data and controlled refetching
+- Manual Refresh actions on Dashboard, Tasks, and Activity pages
 - Fully responsive (desktop + mobile)
 - Deployable to Vercel with persistent storage (Vercel KV)
 

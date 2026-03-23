@@ -51,3 +51,17 @@ export interface CreateTaskInput {
 export interface UpdateTaskInput extends Partial<CreateTaskInput> {
   status?: TaskStatus
 }
+
+export type NotificationType = 'task_assigned' | 'task_status_updated' | 'task_updated' | 'task_deleted'
+
+export interface AppNotification {
+  id: string
+  userId: string
+  actorUserId: string
+  type: NotificationType
+  message: string
+  relatedUser: string
+  timestamp: string
+  taskId?: string
+  isRead: boolean
+}

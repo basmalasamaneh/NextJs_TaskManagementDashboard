@@ -1,17 +1,23 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useMemo } from 'react'
 import { ActivityLog } from '@/types'
 import { useSession } from 'next-auth/react'
+import { useQuery } from '@tanstack/react-query'
+import { queryKeys } from '@/lib/queryKeys'
 
-async function apiFetch(url: string): Promise<any | null> {
-  try {
-    const res = await fetch(url)
-    if (!res.ok) return null
-    return await res.json()
-  } catch {
-    return null
+type ActivityLogsResponse = {
+  logs: ActivityLog[]
+  total: number
+}
+
+async function fetcher<T>(url: string): Promise<T> {
+  const res = await fetch(url)
+  const data = await res.json().catch(() => null)
+  if (!res.ok) {
+    throw new Error(data?.error ?? 'Failed to fetch activity logs')
   }
+  return data as T
 }
 
 export function useActivityLogs(limit?: number, filters?: {
@@ -23,35 +29,32 @@ export function useActivityLogs(limit?: number, filters?: {
   offset?: number
 }) {
   const { status: sessionStatus } = useSession()
-  const [logs, setLogs]       = useState<ActivityLog[]>([])
-  const [total, setTotal]     = useState(0)
-  const [loading, setLoading] = useState(true)
+  const enabled = sessionStatus === 'authenticated'
 
-  // Memoize the query parameters to prevent unnecessary re-fetches
-  const queryKey = JSON.stringify({ limit, filters, sessionStatus })
+  const queryKey = useMemo(
+    () => queryKeys.activity.list(limit, filters),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [limit, filters?.taskId, filters?.action, filters?.user, filters?.dateFrom, filters?.dateTo, filters?.offset]
+  )
 
-  const fetchLogs = useCallback(async () => {
-    if (sessionStatus !== 'authenticated') return
-    setLoading(true)
-    const params = new URLSearchParams()
-    if (limit) params.set('limit', limit.toString())
-    if (filters?.taskId) params.set('taskId', filters.taskId)
-    if (filters?.action) params.set('action', filters.action)
-    if (filters?.user) params.set('user', filters.user)
-    if (filters?.dateFrom) params.set('dateFrom', filters.dateFrom)
-    if (filters?.dateTo) params.set('dateTo', filters.dateTo)
-    if (filters?.offset !== undefined) params.set('offset', filters.offset.toString())
+  const url = useMemo(
+    () => queryKeys.activity.url(limit, filters),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [limit, filters?.taskId, filters?.action, filters?.user, filters?.dateFrom, filters?.dateTo, filters?.offset]
+  )
 
-    const url = `/api/activity?${params.toString()}`
-    const data = await apiFetch(url)
-    if (data !== null) {
-      setLogs(data.logs || [])
-      setTotal(data.total || 0)
-    }
-    setLoading(false)
-  }, [queryKey]) // Use the memoized query key as dependency
+  const { data, error, isLoading, refetch } = useQuery<ActivityLogsResponse>({
+    queryKey,
+    queryFn: () => fetcher<ActivityLogsResponse>(url),
+    enabled,
+    placeholderData: prev => prev,
+  })
 
-  useEffect(() => { fetchLogs() }, [fetchLogs])
-
-  return { logs, total, loading, refetch: fetchLogs }
+  return {
+    logs: data?.logs ?? [],
+    total: data?.total ?? 0,
+    loading: isLoading || sessionStatus === 'loading',
+    error: error instanceof Error ? error.message : null,
+    refetch,
+  }
 }
