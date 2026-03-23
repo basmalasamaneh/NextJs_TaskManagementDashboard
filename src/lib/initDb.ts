@@ -1,7 +1,15 @@
 import { db } from './db'
 import { sql } from 'drizzle-orm'
 
-export async function initializeDatabase() {
+let initPromise: Promise<void> | null = null
+
+export function initializeDatabase(): Promise<void> {
+  if (initPromise) return initPromise
+  initPromise = _initializeDatabase()
+  return initPromise
+}
+
+async function _initializeDatabase() {
   try {
     // Create tables if they don't exist
     await db.run(sql`
@@ -61,6 +69,30 @@ export async function initializeDatabase() {
         FOREIGN KEY (task_id) REFERENCES tasks(id)
       )
     `)
+
+    await db.run(sql`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        actor_user_id TEXT NOT NULL,
+        task_id TEXT,
+        type TEXT NOT NULL,
+        message TEXT NOT NULL,
+        related_user TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        is_read TEXT NOT NULL DEFAULT '0',
+        FOREIGN KEY (user_id) REFERENCES users(id),
+        FOREIGN KEY (actor_user_id) REFERENCES users(id),
+        FOREIGN KEY (task_id) REFERENCES tasks(id)
+      )
+    `)
+
+    // Migration-safe patch for existing databases created before notifications read state existed.
+    try {
+      await db.run(sql`ALTER TABLE notifications ADD COLUMN is_read TEXT NOT NULL DEFAULT '0'`)
+    } catch {
+      // Column already exists; ignore.
+    }
 
     console.log('Database initialized successfully')
   } catch (error) {

@@ -4,9 +4,6 @@ import { authOptions } from '@/lib/authOptions'
 import { getActivitiesByUserId, getAllActivities } from '@/lib/activityStore'
 
 export const dynamic = 'force-dynamic'
-export const runtime = 'nodejs'
-
-const noStoreHeaders = { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
 
 function startOfDayIso(dateStr: string): string {
   return new Date(`${dateStr}T00:00:00.000`).toISOString()
@@ -58,7 +55,7 @@ export async function GET(req: NextRequest) {
       const filtered = logs.filter(log => (log.userName || '').toLowerCase().includes(normalized))
       const total = filtered.length
       const paginated = filtered.slice(offset, offset + limit)
-      return NextResponse.json({ logs: paginated, total }, { headers: noStoreHeaders })
+      return NextResponse.json({ logs: paginated, total })
     }
 
     const { logs, total } = await getAllActivities({
@@ -67,7 +64,7 @@ export async function GET(req: NextRequest) {
       offset,
     })
 
-    return NextResponse.json({ logs, total }, { headers: noStoreHeaders })
+    return NextResponse.json({ logs, total })
   } catch (error) {
     console.error('[GET /api/activity]', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

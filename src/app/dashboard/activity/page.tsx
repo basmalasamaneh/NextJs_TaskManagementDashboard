@@ -9,6 +9,7 @@ import {
   Filter,
   ChevronLeft,
   ChevronRight,
+  RefreshCw,
   Activity,
   PencilLine,
   CheckCircle2,
@@ -295,11 +296,12 @@ export default function ActivityPage() {
 
   const [filters, setFilters] = useState({})
   const [currentPage, setCurrentPage] = useState(1)
+  const [refreshing, setRefreshing] = useState(false)
 
   const offset = (currentPage - 1) * ITEMS_PER_PAGE
   const memoizedFilters = useMemo(() => ({ ...filters, offset }), [filters, offset])
 
-  const { logs, total, loading } = useActivityLogs(ITEMS_PER_PAGE, memoizedFilters)
+  const { logs, total, loading, error, refetch } = useActivityLogs(ITEMS_PER_PAGE, memoizedFilters)
 
   const totalPages = Math.ceil(total / ITEMS_PER_PAGE)
 
@@ -312,13 +314,36 @@ export default function ActivityPage() {
     setCurrentPage(page)
   }
 
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    try {
+      await Promise.all([
+        refetch(),
+        new Promise(resolve => setTimeout(resolve, 400)),
+      ])
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
   return (
     <div className="pb-4">
       <div className="mb-6 rounded-2xl border border-gray-100 bg-gradient-to-r from-slate-50 via-white to-slate-50 p-5 shadow-sm">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Activity Logs</h1>
-          <p className="mt-1 text-sm text-gray-500">Recent system actions with full details, filters, and pagination.</p>
-          <p className="mt-2 text-xs text-gray-500">Each page shows 10 activities.</p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Activity Logs</h1>
+            <p className="mt-1 text-sm text-gray-500">Recent system actions with full details, filters, and pagination.</p>
+            <p className="mt-2 text-xs text-gray-500">Each page shows 10 activities.</p>
+          </div>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing || loading}
+            className={`btn-secondary transition-all ${refreshing ? 'opacity-80 cursor-not-allowed' : ''}`}
+            title="Refresh activity logs"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">{refreshing ? 'Refreshing…' : 'Refresh'}</span>
+          </button>
         </div>
       </div>
 
@@ -327,6 +352,13 @@ export default function ActivityPage() {
         onFiltersChange={handleFiltersChange}
         isAdmin={isAdmin}
       />
+
+      {error && (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <p className="text-sm font-semibold text-red-700">Failed to load activity logs</p>
+          <p className="text-xs text-red-600 mt-1">{error}</p>
+        </div>
+      )}
 
       <div className="grid gap-4">
         {loading ? (

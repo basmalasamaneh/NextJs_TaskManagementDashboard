@@ -40,8 +40,8 @@ function TaskRow({ task }: { task: Task }) {
 
 export default function DashboardPage() {
   const { data: session } = useSession()
-  const { stats, loading: statsLoading, actionState, refetch, createTask } = useTasks()
-  const { tasks: recentTasks, loading: tasksLoading, refetch: refetchRecent } = useRecentTasks(6)
+  const { stats, loading: statsLoading, error: statsError, actionState, refetch, createTask } = useTasks()
+  const { tasks: recentTasks, loading: tasksLoading, error: recentError, refetch: refetchRecent } = useRecentTasks(6)
   const [showModal,  setShowModal]  = useState(false)
   const [refreshing, setRefreshing] = useState(false)
 
@@ -59,7 +59,6 @@ export default function DashboardPage() {
 
   const handleCreate = async (data: Partial<Task>) => {
     await createTask(data)
-    await refetchRecent()
   }
 
   return (
@@ -103,6 +102,15 @@ export default function DashboardPage() {
           </button>
         </div>
       </div>
+
+      {(statsError || recentError) && (
+        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <p className="text-sm font-semibold text-red-700">Could not load some dashboard data</p>
+          <p className="text-xs text-red-600 mt-1">
+            {statsError ?? recentError}
+          </p>
+        </div>
+      )}
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">

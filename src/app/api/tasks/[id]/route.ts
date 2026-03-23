@@ -3,12 +3,27 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
 import { updateTask, deleteTask, getTaskById } from '@/lib/taskStore'
 import { addActivity } from '@/lib/activityStore'
+import { createNotification } from '@/lib/notificationStore'
+import { getAllUsers, getUserById } from '@/lib/userStore'
 import { canEditTask, canDeleteTask, canUpdateTaskStatus } from '@/lib/rbac'
 
 export const dynamic = 'force-dynamic'
-export const runtime = 'nodejs'
 
-const noStoreHeaders = { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
+async function getRecipientsForTaskEvent(ownerUserId: string, relatedUserIds: Array<string | undefined>): Promise<string[]> {
+  const users = await getAllUsers()
+  const recipients = new Set<string>()
+
+  for (const u of users) {
+    if (u.role === 'admin') recipients.add(u.id)
+  }
+
+  recipients.add(ownerUserId)
+  for (const id of relatedUserIds) {
+    if (id) recipients.add(id)
+  }
+
+  return Array.from(recipients)
+}
 
 // ── PUT /api/tasks/:id ────────────────────────────────────────
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
@@ -89,7 +104,75 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       console.warn('[PUT /api/tasks/:id] Activity logging failed', err)
     }
 
-    return NextResponse.json(updatedTask, { headers: noStoreHeaders })
+    // In-app notifications for key updates.
+    try {
+      const creatorName = task.createdBy ?? (await getUserById(task.userId))?.name ?? 'Unknown User'
+      const statusRelatedUser = `Creator: ${creatorName} | Assigned as: ${updatedTask.assignedUser}`
+      const statusRecipients = await getRecipientsForTaskEvent(task.userId, [
+        task.assignedUserId,
+        updatedTask.assignedUserId,
+      ])
+
+      if (body.status && body.status !== task.status) {
+        const statusNotifications = statusRecipients.map(recipientId =>
+          createNotification({
+            userId: recipientId,
+            actorUserId: userId,
+            type: 'task_status_updated',
+            message: `Status for "${task.title}" changed from ${task.status} to ${body.status}.`,
+            relatedUser: statusRelatedUser,
+            taskId: task.id,
+          })
+        )
+        await Promise.all(statusNotifications)
+      }
+
+      const isStatusChange = Boolean(body.status && body.status !== task.status)
+
+      const beforeAssignee = task.assignedUser?.trim() ?? ''
+      const afterAssignee = updatedTask.assignedUser?.trim() ?? ''
+      const isAssignmentChange = Boolean(afterAssignee && beforeAssignee !== afterAssignee)
+      if (afterAssignee && beforeAssignee !== afterAssignee) {
+        const assignmentRelatedUser = `Creator: ${creatorName} | Assigned as: ${afterAssignee}`
+        const assignmentRecipients = await getRecipientsForTaskEvent(task.userId, [
+          task.assignedUserId,
+          updatedTask.assignedUserId,
+        ])
+
+        await Promise.all(
+          assignmentRecipients.map(recipientId =>
+            createNotification({
+              userId: recipientId,
+              actorUserId: userId,
+              type: 'task_assigned',
+              message: `Task "${task.title}" was assigned to ${afterAssignee}.`,
+              relatedUser: assignmentRelatedUser,
+              taskId: task.id,
+            })
+          )
+        )
+      }
+
+      if (!isStatusChange && !isAssignmentChange) {
+        const updateRelatedUser = `Creator: ${creatorName} | Assigned as: ${updatedTask.assignedUser}`
+        await Promise.all(
+          statusRecipients.map(recipientId =>
+            createNotification({
+              userId: recipientId,
+              actorUserId: userId,
+              type: 'task_updated',
+              message: `Task "${task.title}" was updated.`,
+              relatedUser: updateRelatedUser,
+              taskId: task.id,
+            })
+          )
+        )
+      }
+    } catch (err) {
+      console.warn('[PUT /api/tasks/:id] Notification logging failed', err)
+    }
+
+    return NextResponse.json(updatedTask)
   } catch (error) {
     console.error('[PUT /api/tasks/:id]', error)
     if (error instanceof Error && error.message.includes('Assigned user')) {
@@ -145,12 +228,34 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       console.warn('[DELETE /api/tasks/:id] Activity logging failed', err)
     }
 
+    // In-app notifications for task deletion.
+    try {
+      const creatorName = task.createdBy ?? (await getUserById(task.userId))?.name ?? 'Unknown User'
+      const deleteRelatedUser = `Creator: ${creatorName} | Assigned as: ${task.assignedUser}`
+      const recipients = await getRecipientsForTaskEvent(task.userId, [task.assignedUserId])
+
+      await Promise.all(
+        recipients.map(recipientId =>
+          createNotification({
+            userId: recipientId,
+            actorUserId: userId,
+            type: 'task_deleted',
+            message: `Task "${task.title}" was deleted.`,
+            relatedUser: deleteRelatedUser,
+            taskId: task.id,
+          })
+        )
+      )
+    } catch (err) {
+      console.warn('[DELETE /api/tasks/:id] Notification logging failed', err)
+    }
+
     const ok = await deleteTask(userId, params.id, isAdmin)
     if (!ok) {
       return NextResponse.json({ error: 'Task not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ success: true, message: 'Task deleted successfully' }, { headers: noStoreHeaders })
+    return NextResponse.json({ success: true, message: 'Task deleted successfully' })
   } catch (error) {
     console.error('[DELETE /api/tasks/:id]', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

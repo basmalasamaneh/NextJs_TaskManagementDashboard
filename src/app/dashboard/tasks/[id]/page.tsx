@@ -122,7 +122,7 @@ function TaskDetail({ task }: { task: Task }) {
 
 function TaskActivityFeed({ taskId }: { taskId: string }) {
   const memoizedFilters = useMemo(() => ({ taskId }), [taskId])
-  const { logs, loading } = useActivityLogs(undefined, memoizedFilters)
+  const { logs, loading, error } = useActivityLogs(undefined, memoizedFilters)
 
   if (loading) {
     return (
@@ -141,6 +141,17 @@ function TaskActivityFeed({ taskId }: { taskId: string }) {
           <AlertCircle className="w-6 h-6 text-gray-400" />
         </div>
         <p className="text-sm text-gray-500">No activity yet for this task.</p>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-8">
+        <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-3">
+          <AlertCircle className="w-6 h-6 text-red-400" />
+        </div>
+        <p className="text-sm text-red-600">Failed to load activity feed.</p>
       </div>
     )
   }
@@ -165,7 +176,7 @@ function TaskActivityFeed({ taskId }: { taskId: string }) {
 export default function TaskDetailPage({ params }: { params: { id: string } }) {
   const { data: session } = useSession()
   const router = useRouter()
-  const { tasks, loading } = useTasks()
+  const { tasks, loading, error } = useTasks()
   const [showModal, setShowModal] = useState(false)
 
   const task = tasks.find(t => t.id === params.id)
@@ -184,6 +195,18 @@ export default function TaskDetailPage({ params }: { params: { id: string } }) {
           <div className="h-64 bg-gray-200 rounded animate-pulse" />
           <div className="h-64 bg-gray-200 rounded animate-pulse" />
         </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">Failed to load task</h1>
+        <p className="text-gray-500 mb-4">{error}</p>
+        <Link href="/dashboard/tasks" className="btn-primary">
+          <ArrowLeft className="w-4 h-4" /> Back to Tasks
+        </Link>
       </div>
     )
   }

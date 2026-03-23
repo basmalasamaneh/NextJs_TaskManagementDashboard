@@ -3,12 +3,25 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
 import { getTasksByUserId, getAllTasks, createTask, getTaskStats } from '@/lib/taskStore'
 import { addActivity } from '@/lib/activityStore'
+import { createNotification } from '@/lib/notificationStore'
+import { getAllUsers } from '@/lib/userStore'
 import { canCreateTask, canViewTask } from '@/lib/rbac'
 
 export const dynamic = 'force-dynamic'
-export const runtime = 'nodejs'
 
-const noStoreHeaders = { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
+async function getRecipientsForTaskEvent(ownerUserId: string, assignedUserId?: string): Promise<string[]> {
+  const users = await getAllUsers()
+  const recipients = new Set<string>()
+
+  for (const u of users) {
+    if (u.role === 'admin') recipients.add(u.id)
+  }
+
+  recipients.add(ownerUserId)
+  if (assignedUserId) recipients.add(assignedUserId)
+
+  return Array.from(recipients)
+}
 
 // ── GET /api/tasks ────────────────────────────────────────────
 export async function GET(req: NextRequest) {
@@ -28,7 +41,7 @@ export async function GET(req: NextRequest) {
 
     if (statsOnly) {
       const stats = await getTaskStats(userId, isAdmin)
-      return NextResponse.json(stats, { headers: noStoreHeaders })
+      return NextResponse.json(stats)
     }
 
     // RBAC: Admin can view all tasks, users can only view their own
@@ -42,7 +55,7 @@ export async function GET(req: NextRequest) {
 
     if (limit) tasks = tasks.slice(0, parseInt(limit))
 
-    return NextResponse.json(tasks, { headers: noStoreHeaders })
+    return NextResponse.json(tasks)
   } catch (error) {
     console.error('[GET /api/tasks]', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -106,7 +119,30 @@ export async function POST(req: NextRequest) {
       console.warn('[POST /api/tasks] Activity logging failed', err)
     }
 
-    return NextResponse.json(task, { status: 201, headers: noStoreHeaders })
+    // In-app notification for assignment.
+    try {
+      const creatorName = (user.name as string) ?? task.createdBy ?? 'Unknown User'
+      const assigneeName = task.assignedUser
+      const relatedUser = `Creator: ${creatorName} | Assigned as: ${assigneeName}`
+      const recipients = await getRecipientsForTaskEvent(task.userId, task.assignedUserId)
+
+      await Promise.all(
+        recipients.map(recipientId =>
+          createNotification({
+            userId: recipientId,
+            actorUserId: userId,
+            type: 'task_assigned',
+            message: `Task "${task.title}" was assigned to ${assigneeName}.`,
+            relatedUser,
+            taskId: task.id,
+          })
+        )
+      )
+    } catch (err) {
+      console.warn('[POST /api/tasks] Notification logging failed', err)
+    }
+
+    return NextResponse.json(task, { status: 201 })
   } catch (error) {
     console.error('[POST /api/tasks]', error)
     if (error instanceof Error && error.message.includes('Assigned user')) {

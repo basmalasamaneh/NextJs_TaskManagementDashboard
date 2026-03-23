@@ -8,6 +8,7 @@ import {
   Activity, CheckSquare, LayoutDashboard, ListTodo,
   LogOut, Menu, X, ChevronDown, Loader2,
 } from 'lucide-react'
+import { NotificationBell } from './NotificationBell'
 
 const navLinks = [
   { href: '/dashboard',         label: 'Dashboard', icon: LayoutDashboard },
@@ -69,8 +70,11 @@ export function Navbar() {
             ))}
           </div>
 
-          {/* User menu (desktop) */}
-          <div className="hidden md:block relative">
+          {/* Desktop actions */}
+          <div className="hidden md:flex items-center gap-2">
+            <NotificationBell />
+
+            <div className="relative">
             <button onClick={() => setUserMenuOpen(v => !v)} disabled={signingOut}
               className="flex items-center gap-2 py-1.5 px-3 rounded-lg hover:bg-green-700 transition-colors">
               <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-xs font-bold">
@@ -98,13 +102,17 @@ export function Navbar() {
                 </div>
               </>
             )}
+            </div>
           </div>
 
-          {/* Mobile hamburger */}
-          <button onClick={() => setMobileOpen(v => !v)} disabled={signingOut}
-            className="md:hidden p-2 rounded-lg hover:bg-green-700 transition-colors">
-            {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
+          {/* Mobile actions */}
+          <div className="md:hidden flex items-center gap-1">
+            <NotificationBell />
+            <button onClick={() => setMobileOpen(v => !v)} disabled={signingOut}
+              className="p-2 rounded-lg hover:bg-green-700 transition-colors">
+              {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+          </div>
         </div>
 
         {/* Mobile menu */}
