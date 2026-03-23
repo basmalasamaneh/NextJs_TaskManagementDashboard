@@ -175,14 +175,13 @@ export default function TasksPage() {
   const isAdmin = (session?.user as any)?.role === 'admin'
   const currentUserId = (session?.user as any)?.id as string | undefined
 
-  const { tasks, loading, error, actionState, completingId, refetch, createTask, updateTask, markComplete, deleteTask } = useTasks()
+  const { tasks, loading, actionState, completingId, refetch, createTask, updateTask, markComplete, deleteTask } = useTasks()
 
   const [showModal,    setShowModal]    = useState(false)
   const [editingTask,  setEditingTask]  = useState<Task | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Task | null>(null)
   const [isDeleting,   setIsDeleting]   = useState(false)
   const [deleteError,  setDeleteError]  = useState<string>('')
-  const [refreshing,   setRefreshing]   = useState(false)
 
   // ── Filters ──────────────────────────────────────────────────
   const [search,         setSearch]         = useState('')
@@ -270,18 +269,6 @@ export default function TasksPage() {
     }
   }
 
-  const handleRefresh = async () => {
-    setRefreshing(true)
-    try {
-      await Promise.all([
-        refetch(),
-        new Promise(resolve => setTimeout(resolve, 400)),
-      ])
-    } finally {
-      setRefreshing(false)
-    }
-  }
-
   return (
     <>
       <ActionOverlay state={actionState} />
@@ -325,12 +312,11 @@ export default function TasksPage() {
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
-            onClick={handleRefresh}
-            disabled={refreshing || loading}
-            className={`btn-secondary transition-all ${refreshing ? 'opacity-80 cursor-not-allowed' : ''}`}
+            onClick={() => refetch()} disabled={loading}
+            className={`btn-secondary transition-all ${loading ? 'opacity-80 cursor-not-allowed' : ''}`}
           >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">{refreshing ? 'Refreshing…' : 'Refresh'}</span>
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">{loading ? 'Refreshing…' : 'Refresh'}</span>
           </button>
           <button onClick={() => { setShowModal(true); setEditingTask(null) }} className="btn-primary">
             <Plus className="w-4 h-4" />
@@ -338,13 +324,6 @@ export default function TasksPage() {
           </button>
         </div>
       </div>
-
-      {error && (
-        <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
-          <p className="text-sm font-semibold text-red-700">Failed to load tasks</p>
-          <p className="text-xs text-red-600 mt-1">{error}</p>
-        </div>
-      )}
 
       {/* ── Filters ── */}
       <div className="card p-4 mb-5 space-y-3">

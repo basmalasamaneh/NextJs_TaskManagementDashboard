@@ -33,23 +33,10 @@ export const activityLogs = sqliteTable("activity_logs", {
   details: text("details"),
 });
 
-export const notifications = sqliteTable("notifications", {
-  id: text("id").primaryKey(),
-  userId: text("user_id").notNull().references(() => users.id),
-  actorUserId: text("actor_user_id").notNull().references(() => users.id),
-  taskId: text("task_id").references(() => tasks.id),
-  type: text("type").notNull(),
-  message: text("message").notNull(),
-  relatedUser: text("related_user").notNull(),
-  timestamp: text("timestamp").notNull(),
-  isRead: text("is_read").notNull().default("0"),
-});
-
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   tasks: many(tasks),
   activityLogs: many(activityLogs),
-  notifications: many(notifications),
 }));
 
 export const tasksRelations = relations(tasks, ({ one, many }) => ({
@@ -62,7 +49,6 @@ export const tasksRelations = relations(tasks, ({ one, many }) => ({
     references: [users.id],
   }),
   activityLogs: many(activityLogs),
-  notifications: many(notifications),
 }));
 
 export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
@@ -72,21 +58,6 @@ export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
   }),
   task: one(tasks, {
     fields: [activityLogs.taskId],
-    references: [tasks.id],
-  }),
-}));
-
-export const notificationsRelations = relations(notifications, ({ one }) => ({
-  user: one(users, {
-    fields: [notifications.userId],
-    references: [users.id],
-  }),
-  actor: one(users, {
-    fields: [notifications.actorUserId],
-    references: [users.id],
-  }),
-  task: one(tasks, {
-    fields: [notifications.taskId],
     references: [tasks.id],
   }),
 }));

@@ -2,7 +2,7 @@ import { Task, TaskStatus } from '@/types'
 import { v4 as uuidv4 } from 'uuid'
 import { isPast, parseISO } from 'date-fns'
 import { db } from './db'
-import { activityLogs, notifications, tasks } from './schema'
+import { activityLogs, tasks } from './schema'
 import { eq, desc } from 'drizzle-orm'
 import { getAllUsers, getUserByName } from './userStore'
 
@@ -189,8 +189,6 @@ export async function deleteTask(userId: string, taskId: string, isAdmin = false
 
     // Keep historical logs but detach them from the task to satisfy FK constraints.
     await db.update(activityLogs).set({ taskId: null }).where(eq(activityLogs.taskId, taskId))
-    // Keep notification history but detach task reference to satisfy FK constraints.
-    await db.update(notifications).set({ taskId: null }).where(eq(notifications.taskId, taskId))
     await db.delete(tasks).where(eq(tasks.id, taskId))
     return true
   } catch (error) {
