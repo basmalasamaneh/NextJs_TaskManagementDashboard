@@ -4,6 +4,9 @@ import { authOptions } from '@/lib/authOptions'
 import { getAllPublicUsers } from '@/lib/userStore'
 
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
+const noStoreHeaders = { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
 
 export async function GET() {
   try {
@@ -13,7 +16,7 @@ export async function GET() {
     }
 
     const users = await getAllPublicUsers()
-    return NextResponse.json(users)
+    return NextResponse.json(users, { headers: noStoreHeaders })
   } catch (error) {
     console.error('[GET /api/users]', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

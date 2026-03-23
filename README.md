@@ -1,7 +1,7 @@
 # TaskBoard – My Task Manager
 
 Simple dashboard to manage tasks  
-Made with Next.js + Tailwind + NextAuth
+Made with Next.js + Tailwind + NextAuth + SQLite (Drizzle ORM)
 
 ## What it can do
 
@@ -11,18 +11,21 @@ Made with Next.js + Tailwind + NextAuth
 - Dashboard with stats: Total, Completed, Pending, Overdue
 - Progress bar + Pie/Bar chart (Recharts)
 - Full Task CRUD: Create, Edit, Delete, Mark as Complete
-- In-app notifications for task events (assign, status update, update, delete)
-- Role-aware notifications (Admin gets all relevant events, users get their own related events)
-- Notification bell with unread count, grouped list, timestamps, and mark-all-read
 - Search tasks by title
 - Filter by Status, Priority, Due Date
 - Pagination (10 tasks per page)
-- Admin view: see and manage all users' tasks
-- Client-side caching with React Query (TanStack Query)
-- Faster navigation with cached task/activity data and controlled refetching
-- Manual Refresh actions on Dashboard, Tasks, and Activity pages
+- **Role-Based Access Control (RBAC)**:
+  - Admin: view & manage ALL tasks
+  - User: only see & change the status of their own tasks (no delete)
+- **Activity Logs**:
+  - Records task creation, updates, deletions, status changes
+  - Shows who did what and when
+  - Viewable in a separate logs page
+- **Real database** with SQLite + Drizzle ORM:
+  - Stores users, tasks, and activity logs
+  - Tasks linked to users, logs linked to tasks & users
 - Fully responsive (desktop + mobile)
-- Deployable to Vercel with persistent storage (Vercel KV)
+- Deployable to Vercel with persistent storage (Turso/libsql)
 
 ## How to start
 
@@ -35,6 +38,8 @@ npm install
 ```dotenv
 NEXTAUTH_SECRET=your-secret-key-change-this-in-production-min32chars
 NEXTAUTH_URL=http://localhost:3000
+
+TURSO_DATABASE_URL=file:./sqlite.db
 ```
 
 **3. Run the app**
@@ -46,4 +51,16 @@ Then open [http://localhost:3000](http://localhost:3000) in your browser.
 
 **4. Live Application URL**
 Open [https://next-js-task-management-dashboard.vercel.app/](https://next-js-task-management-dashboard.vercel.app/) in your browser.
+
+## Vercel Deployment Notes
+
+If tasks/activity logs are not showing after deploy, the most common cause is database configuration.
+
+- Required on Vercel: set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` in Project Settings -> Environment Variables.
+- This app now enforces Turso on Vercel and will fail fast at startup if those variables are missing.
+
+Caching notes:
+
+- API routes are configured as dynamic and return `Cache-Control: no-store`.
+- Client fetch calls use `cache: 'no-store'` so task/activity screens refresh with latest server data.
 
