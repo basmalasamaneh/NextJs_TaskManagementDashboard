@@ -6,6 +6,9 @@ import { addActivity } from '@/lib/activityStore'
 import { canEditTask, canDeleteTask, canUpdateTaskStatus } from '@/lib/rbac'
 
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
+const noStoreHeaders = { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
 
 // ── PUT /api/tasks/:id ────────────────────────────────────────
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
@@ -86,7 +89,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       console.warn('[PUT /api/tasks/:id] Activity logging failed', err)
     }
 
-    return NextResponse.json(updatedTask)
+    return NextResponse.json(updatedTask, { headers: noStoreHeaders })
   } catch (error) {
     console.error('[PUT /api/tasks/:id]', error)
     if (error instanceof Error && error.message.includes('Assigned user')) {
@@ -147,7 +150,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       return NextResponse.json({ error: 'Task not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ success: true, message: 'Task deleted successfully' })
+    return NextResponse.json({ success: true, message: 'Task deleted successfully' }, { headers: noStoreHeaders })
   } catch (error) {
     console.error('[DELETE /api/tasks/:id]', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

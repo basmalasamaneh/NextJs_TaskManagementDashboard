@@ -6,6 +6,9 @@ import { addActivity } from '@/lib/activityStore'
 import { canCreateTask, canViewTask } from '@/lib/rbac'
 
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
+const noStoreHeaders = { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
 
 // ── GET /api/tasks ────────────────────────────────────────────
 export async function GET(req: NextRequest) {
@@ -25,7 +28,7 @@ export async function GET(req: NextRequest) {
 
     if (statsOnly) {
       const stats = await getTaskStats(userId, isAdmin)
-      return NextResponse.json(stats)
+      return NextResponse.json(stats, { headers: noStoreHeaders })
     }
 
     // RBAC: Admin can view all tasks, users can only view their own
@@ -39,7 +42,7 @@ export async function GET(req: NextRequest) {
 
     if (limit) tasks = tasks.slice(0, parseInt(limit))
 
-    return NextResponse.json(tasks)
+    return NextResponse.json(tasks, { headers: noStoreHeaders })
   } catch (error) {
     console.error('[GET /api/tasks]', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -103,7 +106,7 @@ export async function POST(req: NextRequest) {
       console.warn('[POST /api/tasks] Activity logging failed', err)
     }
 
-    return NextResponse.json(task, { status: 201 })
+    return NextResponse.json(task, { status: 201, headers: noStoreHeaders })
   } catch (error) {
     console.error('[POST /api/tasks]', error)
     if (error instanceof Error && error.message.includes('Assigned user')) {

@@ -10,7 +10,7 @@ function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)) }
 
 async function apiFetch(url: string, options?: RequestInit): Promise<any | null> {
   try {
-    const res = await fetch(url, options)
+    const res = await fetch(url, { ...options, cache: 'no-store' })
     const data = await res.json().catch(() => null)
     if (!res.ok) return { success: false, ...(data ?? {}), status: res.status }
     return data

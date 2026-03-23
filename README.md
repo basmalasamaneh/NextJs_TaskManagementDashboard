@@ -52,3 +52,15 @@ Then open [http://localhost:3000](http://localhost:3000) in your browser.
 **4. Live Application URL**
 Open [https://next-js-task-management-dashboard.vercel.app/](https://next-js-task-management-dashboard.vercel.app/) in your browser.
 
+## Vercel Deployment Notes
+
+If tasks/activity logs are not showing after deploy, the most common cause is database configuration.
+
+- Required on Vercel: set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` in Project Settings -> Environment Variables.
+- This app now enforces Turso on Vercel and will fail fast at startup if those variables are missing.
+
+Caching notes:
+
+- API routes are configured as dynamic and return `Cache-Control: no-store`.
+- Client fetch calls use `cache: 'no-store'` so task/activity screens refresh with latest server data.
+
